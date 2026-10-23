@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Node
+metadata:
+  name: kwok-b200-1
+  annotations:
+    node.alpha.kubernetes.io/ttl: "0"
+    kwok.x-k8s.io/node: fake
+  labels:
+    type: kwok
+    app.kubernetes.io/part-of: k8s-mock-test
+    k8s-mock-test/gpu-type: b200
+    run.ai/simulated-gpu-node-pool: b200
+    kubernetes.io/arch: amd64
+    kubernetes.io/hostname: kwok-b200-1
+    kubernetes.io/os: linux
+    kubernetes.io/role: agent
+    node-role.kubernetes.io/agent: ""
+    nvidia.com/gpu.family: blackwell
+    nvidia.com/gpu.compute.major: "10"
+    nvidia.com/gpu.compute.minor: "0"
+spec:
+  taints:
+    - key: kwok.x-k8s.io/node
+      value: fake
+      effect: NoSchedule
+status:
+  allocatable:
+    cpu: "224"
+    memory: 2Ti
+    pods: "110"
+  capacity:
+    cpu: "224"
+    memory: 2Ti
+    pods: "110"
+  nodeInfo:
+    architecture: amd64
+    kubeProxyVersion: fake
+    kubeletVersion: fake
+    operatingSystem: linux
+  phase: Running

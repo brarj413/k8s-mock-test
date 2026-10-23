@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Node
+metadata:
+  name: kwok-gb300-1
+  annotations:
+    node.alpha.kubernetes.io/ttl: "0"
+    kwok.x-k8s.io/node: fake
+  labels:
+    type: kwok
+    app.kubernetes.io/part-of: k8s-mock-test
+    k8s-mock-test/gpu-type: gb300
+    run.ai/simulated-gpu-node-pool: gb300
+    kubernetes.io/arch: arm64
+    kubernetes.io/hostname: kwok-gb300-1
+    kubernetes.io/os: linux
+    kubernetes.io/role: agent
+    node-role.kubernetes.io/agent: ""
+    nvidia.com/gpu.family: blackwell
+    nvidia.com/gpu.compute.major: "10"
+    nvidia.com/gpu.compute.minor: "3"
+spec:
+  taints:
+    - key: kwok.x-k8s.io/node
+      value: fake
+      effect: NoSchedule
+status:
+  allocatable:
+    cpu: "144"
+    memory: 960Gi
+    pods: "110"
+  capacity:
+    cpu: "144"
+    memory: 960Gi
+    pods: "110"
+  nodeInfo:
+    architecture: arm64
+    kubeProxyVersion: fake
+    kubeletVersion: fake
+    operatingSystem: linux
+  phase: Running
