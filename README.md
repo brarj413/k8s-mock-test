@@ -101,7 +101,10 @@ For every type in `GPU_TYPES`:
 | too-many pod | a pod asking for one GPU more than a node has stays `Pending` with `Insufficient nvidia.com/gpu` |
 
 It prints a PASS/FAIL line per check and a summary, and exits non-zero on any
-failure. `KEEP=1 make container-test` leaves the test pods in place.
+failure. A type's pods run one at a time and are deleted afterwards, so one
+fake node per type is enough. Besides `nvidia.com/gpu.product`, the test pods
+select the suite's `k8s-mock-test/gpu-type` label, so a real node with a
+leftover product label can't attract them.
 
 ## Writing your own tests
 
@@ -180,9 +183,12 @@ Check these before running the suite on a cluster other people use:
   The suite moves them to `KWOK_POD_CIDR` and `KWOK_NODE_IP`, by default in
   `198.18.0.0/15`, a range reserved for benchmarking. Pick another range if
   your cluster uses that one.
-- **A real NVIDIA GPU Operator:** the generated values turn off
-  fake-gpu-operator's real-node DaemonSets (device plugin, MIG faker) and its
-  `nvidia` RuntimeClass. Its status exporter DaemonSet stays on, because the
+- **A real NVIDIA GPU Operator:** it sees the fake nodes' GPU labels and
+  manages its own labels on them. On a shared test cluster it set
+  `nvidia.com/gpu.present=false` on every fake node. Its DaemonSets don't
+  tolerate the KWOK taint, so none of its pods land there. The generated values
+  turn off fake-gpu-operator's real-node DaemonSets (device plugin, MIG faker)
+  and its `nvidia` RuntimeClass. Its status exporter DaemonSet stays on, because the
   KWOK labels come from the same component. It selects nodes the GPU Operator
   labels `nvidia.com/gpu.deploy.dcgm-exporter=true`, so it would run beside the
   real DCGM exporter on real GPU nodes. See fake-gpu-operator's

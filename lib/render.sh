@@ -99,7 +99,9 @@ EOF
 }
 
 # render_gpu_pod <name> <namespace> <gpus>: a pod asking for <gpus> GPUs of the
-# type, selected the way a real workload would (GPU Feature Discovery label).
+# type, selected the way a real workload would (GPU Feature Discovery label),
+# plus the suite's own node label so real nodes that happen to carry the same
+# product label can't attract it.
 render_gpu_pod() {
   cat <<EOF
 apiVersion: v1
@@ -114,6 +116,7 @@ spec:
   restartPolicy: Never
   nodeSelector:
     nvidia.com/gpu.product: $GPU_PRODUCT
+    k8s-mock-test/gpu-type: $GPU_TYPE
   tolerations:
     # Only needed for KWOK nodes; harmless elsewhere.
     - key: kwok.x-k8s.io/node

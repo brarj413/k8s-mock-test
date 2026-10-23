@@ -6,7 +6,7 @@
 #   1-gpu pod   a pod asking for 1 GPU runs on a node of the type
 #   full node   a pod asking for every GPU of a node runs
 #   too many    a pod asking for GPU_COUNT+1 stays Pending (Insufficient)
-# KEEP=1 leaves the test pods in CONTAINER_TEST_NAMESPACE.
+# The pods of a type run one at a time, so a single node per type is enough.
 set -euo pipefail
 # shellcheck source=../lib/common.sh
 . "$(dirname "$0")/../lib/common.sh"
@@ -49,43 +49,42 @@ for t in $GPU_TYPES; do
   if [ -z "$bad" ]; then record PASS "$t" "labels" "$GPU_PRODUCT x$GPU_COUNT"; else record FAIL "$t" "labels" "want $GPU_PRODUCT/$GPU_COUNT:$bad"; fi
 done
 
+delete_pod() { k -n "$ns" delete pod "$1" --ignore-not-found --wait=true --timeout=120s >/dev/null 2>&1 || true; }
+unsched() {
+  k -n "$ns" get pod "$1" -o jsonpath='{.status.conditions[?(@.type=="PodScheduled")].message}' |
+    grep -q 'Insufficient nvidia.com/gpu'
+}
+
 log "Scheduling test pods"
 for t in $GPU_TYPES; do
   load_gpu "$t"
-  k -n "$ns" delete pod "$t-1gpu" "$t-full" "$t-too-many" --ignore-not-found --wait=true >/dev/null
-  render_gpu_pod "$t-1gpu" "$ns" 1 | k apply -f - >/dev/null
-  render_gpu_pod "$t-full" "$ns" "$GPU_COUNT" | k apply -f - >/dev/null
-  render_gpu_pod "$t-too-many" "$ns" $((GPU_COUNT + 1)) | k apply -f - >/dev/null
-done
+  k -n "$ns" delete pods -l "k8s-mock-test/gpu-type=$t" --ignore-not-found --wait=true --timeout=120s >/dev/null 2>&1 || true
 
-for t in $GPU_TYPES; do
-  load_gpu "$t"
-  for p in "$t-1gpu" "$t-full"; do
+  for case in "1gpu:1" "full:$GPU_COUNT"; do
+    p="$t-${case%%:*}"
+    render_gpu_pod "$p" "$ns" "${case##*:}" | k apply -f - >/dev/null
     if k -n "$ns" wait --for=jsonpath='{.status.phase}'=Running "pod/$p" --timeout=120s >/dev/null 2>&1; then
       node=$(k -n "$ns" get pod "$p" -o jsonpath='{.spec.nodeName}')
       ntype=$(k get node "$node" -o jsonpath='{.metadata.labels.k8s-mock-test/gpu-type}')
       if [ "$ntype" = "$t" ]; then
-        record PASS "$t" "${p#"$t"-} pod" "Running on $node"
+        record PASS "$t" "${case%%:*} pod" "${case##*:} GPU(s), Running on $node"
       else
-        record FAIL "$t" "${p#"$t"-} pod" "Running on $node, a '$ntype' node"
+        record FAIL "$t" "${case%%:*} pod" "Running on $node, a '$ntype' node"
       fi
     else
-      record FAIL "$t" "${p#"$t"-} pod" "not Running: $(k -n "$ns" get pod "$p" -o jsonpath='{.status.phase} {.status.conditions[?(@.type=="PodScheduled")].message}')"
+      record FAIL "$t" "${case%%:*} pod" "not Running: $(k -n "$ns" get pod "$p" -o jsonpath='{.status.phase} {.status.conditions[?(@.type=="PodScheduled")].message}')"
     fi
+    delete_pod "$p"
   done
 
-  unsched() {
-    k -n "$ns" get pod "$1" -o jsonpath='{.status.conditions[?(@.type=="PodScheduled")].message}' |
-      grep -q 'Insufficient nvidia.com/gpu'
-  }
-  if wait_until 60 "" unsched "$t-too-many" && [ "$(k -n "$ns" get pod "$t-too-many" -o jsonpath='{.status.phase}')" = Pending ]; then
+  p="$t-too-many"
+  render_gpu_pod "$p" "$ns" $((GPU_COUNT + 1)) | k apply -f - >/dev/null
+  if wait_until 60 "" unsched "$p" && [ "$(k -n "$ns" get pod "$p" -o jsonpath='{.status.phase}')" = Pending ]; then
     record PASS "$t" "too-many pod" "Pending: Insufficient nvidia.com/gpu for $((GPU_COUNT + 1))"
   else
-    record FAIL "$t" "too-many pod" "phase=$(k -n "$ns" get pod "$t-too-many" -o jsonpath='{.status.phase}')"
+    record FAIL "$t" "too-many pod" "phase=$(k -n "$ns" get pod "$p" -o jsonpath='{.status.phase}')"
   fi
+  delete_pod "$p"
 done
 
-if [ "${KEEP:-0}" != 1 ]; then
-  k -n "$ns" delete pods -l app.kubernetes.io/part-of=k8s-mock-test --wait=false >/dev/null
-fi
 finish
