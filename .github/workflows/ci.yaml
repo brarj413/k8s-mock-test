@@ -1,0 +1,68 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash -n + shellcheck
+        run: make lint
+      - name: Examples are up to date
+        run: make check-examples
+
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+      - name: Install kubeconform
+        run: |
+          curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz |
+            tar -xz -C /usr/local/bin kubeconform
+      - name: Validate example manifests
+        run: |
+          find container/examples -name '*.yaml' ! -name 'fake-gpu-operator-values.yaml' -print0 |
+            xargs -0 kubeconform -strict -summary
+      - name: Render fake-gpu-operator with the generated values
+        run: |
+          . config.env
+          helm template fgo "$FGO_CHART" --version "$FGO_VERSION" \
+            -f container/examples/fake-gpu-operator-values.yaml >/dev/null
+
+  e2e-container:
+    runs-on: ubuntu-24.04
+    needs: [lint, validate]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+      - name: Create a single-node kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: mock-gpu
+      - name: make container-up
+        run: make container-up
+      - name: make container-test
+        run: make container-test
+      - name: Debug on failure
+        if: failure()
+        run: |
+          kubectl get nodes -o wide --show-labels || true
+          kubectl get pods -A -o wide || true
+          kubectl -n fake-gpu-operator logs deploy/kwok-gpu-device-plugin --tail=100 || true
+          kubectl -n fake-gpu-operator logs deploy/status-updater --tail=100 || true
+          kubectl -n fake-gpu-operator logs deploy/nvidia-dcgm-exporter-kwok --tail=100 || true
+          kubectl -n mock-gpu-containers describe pods || true
+      - name: make container-down
+        run: make container-down
