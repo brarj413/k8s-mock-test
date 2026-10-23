@@ -21,7 +21,12 @@ log "Installing KWOK $KWOK_VERSION"
 kwok_url="https://github.com/kubernetes-sigs/kwok/releases/download/$KWOK_VERSION"
 k apply -f "$kwok_url/kwok.yaml" >/dev/null
 k apply -f "$kwok_url/stage-fast.yaml" >/dev/null
+# Fake pod and node addresses outside the cluster's real ranges.
+k -n kube-system patch deployment kwok-controller --type=json -p "[{\"op\": \"replace\",
+  \"path\": \"/spec/template/spec/containers/0/args\", \"value\": [
+  \"--config=/root/.kwok/kwok.yaml\", \"--node-ip=$KWOK_NODE_IP\", \"--cidr=$KWOK_POD_CIDR\"]}]" >/dev/null
 k -n kube-system rollout status deployment/kwok-controller --timeout="$TIMEOUT"
+info "fake pod IPs from $KWOK_POD_CIDR, fake node IP $KWOK_NODE_IP"
 
 log "Installing fake-gpu-operator $FGO_VERSION (pools: $GPU_TYPES)"
 values=$(mktemp "${TMPDIR:-/tmp}/fgo-values.XXXXXX")

@@ -31,6 +31,12 @@ statusExporter:
     # Needs the Prometheus Operator CRDs; off so a bare cluster works.
     prometheusRule:
       enabled: false
+# Real-node components, unused for KWOK nodes. Off so they can't collide with a
+# real GPU Operator on nodes it labels (nvidia.com/gpu.deploy.device-plugin).
+devicePlugin:
+  enabled: false
+migFaker:
+  enabled: false
 # Leave RuntimeClass "nvidia" to a real GPU Operator if the cluster has one.
 runtimeClass:
   enabled: false
