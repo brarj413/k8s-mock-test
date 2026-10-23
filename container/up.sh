@@ -54,6 +54,24 @@ for t in $GPU_TYPES; do
     gpus() { [ "$(k get node "$1" -o jsonpath='{.status.allocatable.nvidia\.com/gpu}')" = "$GPU_COUNT" ]; }
     wait_until "$timeout_s" "$node: nvidia.com/gpu=$GPU_COUNT" gpus "$node" ||
       die "$node never got nvidia.com/gpu=$GPU_COUNT; check: kubectl -n $FGO_NAMESPACE get pods"
+
+    # fake-gpu-operator's KWOK exporter drops a label update that hits a write
+    # conflict (likely while a new node is still being updated by other
+    # controllers) and only relabels when the node's topology ConfigMap
+    # changes, so touch that ConfigMap until the labels land.
+    labelled() { [ "$(k get node "$1" -o jsonpath='{.metadata.labels.nvidia\.com/gpu\.product}')" = "$GPU_PRODUCT" ]; }
+    waited=0
+    until labelled "$node"; do
+      [ "$waited" -ge "$timeout_s" ] &&
+        die "$node never got nvidia.com/gpu.product=$GPU_PRODUCT; check: kubectl -n $FGO_NAMESPACE logs deploy/nvidia-dcgm-exporter-kwok"
+      if [ "$waited" -gt 0 ] && [ $((waited % 30)) -eq 0 ]; then
+        k -n "$FGO_NAMESPACE" annotate configmap "topology-$node" \
+          k8s-mock-test/relabel="$(date +%s)" --overwrite >/dev/null 2>&1 || true
+      fi
+      sleep 5
+      waited=$((waited + 5))
+    done
+    info "$node: nvidia.com/gpu.product=$GPU_PRODUCT"
   done
 done
 

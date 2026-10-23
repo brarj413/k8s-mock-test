@@ -10,6 +10,7 @@ spec:
   restartPolicy: Never
   nodeSelector:
     nvidia.com/gpu.product: NVIDIA-H200
+    k8s-mock-test/gpu-type: h200
   tolerations:
     # Only needed for KWOK nodes; harmless elsewhere.
     - key: kwok.x-k8s.io/node
