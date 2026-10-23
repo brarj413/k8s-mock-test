@@ -34,7 +34,13 @@ status:
     pods: "110"
   nodeInfo:
     architecture: amd64
+    bootID: ""
+    containerRuntimeVersion: kwok
+    kernelVersion: kwok
     kubeProxyVersion: fake
     kubeletVersion: fake
+    machineID: ""
     operatingSystem: linux
+    osImage: kwok
+    systemUUID: ""
   phase: Running

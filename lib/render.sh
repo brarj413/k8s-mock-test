@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Manifest renderers shared by the scripts and hack/render-examples.sh.
 # Each one prints YAML for the GPU type loaded with load_gpu (lib/common.sh).
 
@@ -31,6 +32,12 @@ statusExporter:
     # Needs the Prometheus Operator CRDs; off so a bare cluster works.
     prometheusRule:
       enabled: false
+# Real-node components, unused for KWOK nodes. Off so they can't collide with a
+# real GPU Operator on nodes it labels (nvidia.com/gpu.deploy.device-plugin).
+devicePlugin:
+  enabled: false
+migFaker:
+  enabled: false
 # Leave RuntimeClass "nvidia" to a real GPU Operator if the cluster has one.
 runtimeClass:
   enabled: false
@@ -78,9 +85,15 @@ status:
     pods: "110"
   nodeInfo:
     architecture: $NODE_ARCH
+    bootID: ""
+    containerRuntimeVersion: kwok
+    kernelVersion: kwok
     kubeProxyVersion: fake
     kubeletVersion: fake
+    machineID: ""
     operatingSystem: linux
+    osImage: kwok
+    systemUUID: ""
   phase: Running
 EOF
 }
