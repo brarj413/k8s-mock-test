@@ -76,18 +76,37 @@ export FAKE_PCI_VENDOR_ID=0x10de
 export FAKE_PCI_DEVICE_ID=0x2335
 ```
 
-Other IDs from the same catalog as the container suite:
+### What each board puts on the host's PCI bus
 
-| Type | GPU ID | NVSwitch ID on the host |
+What a faithful fake of each GPU type should present, per node. It uses the
+same catalog as the container suite, and the PCI names come from
+[pci.ids](https://pci-ids.ucw.cz/read/PC/10de).
+
+| Type | Board | GPUs per node | GPU PCI ID | NVSwitches per node | NVSwitch PCI ID |
+|---|---|---|---|---|---|
+| H100 | HGX H100 | 8 | `10de:2330` GH100 [H100 SXM5 80GB] | 4 | `10de:22a3` GH100 [H100 NVSwitch] |
+| H200 | HGX H200 | 8 | `10de:2335` GH100 [H200 SXM 141GB] | 4 | `10de:22a3` GH100 [H100 NVSwitch] |
+| B200 | HGX B200 | 8 | `10de:2901` GB100 [B200] | 0 | none: its NVLink 5 switch chips aren't PCIe devices on the host |
+| GB200 | NVL72 compute tray (arm64) | 4 | `10de:2941` GB100 [HGX GB200] | 0 | none: the switches are in separate NVLink switch trays |
+| GB300 | NVL72 compute tray (arm64) | 4 | `10de:31c2` GB110 [GB300] | 0 | none: the switches are in separate NVLink switch trays |
+
+So a full HGX H100 or H200 node has 12 NVIDIA PCI devices (8 GPUs and
+4 NVSwitches), an HGX B200 node has 8, and a GB200 or GB300 tray has 4.
+
+The GPU Operator's sandbox device plugin names each resource after the
+device's pci.ids entry. A plugin image with an older pci.ids may not know the
+newer IDs:
+
+| Type | GPU resource | NVSwitch resource |
 |---|---|---|
-| H100 SXM5 80GB | `10de:2330` | `10de:22a3` |
-| H200 SXM 141GB | `10de:2335` | `10de:22a3` |
-| B200 | `10de:2901` | none |
-| GB200 | `10de:2941` | none |
-| GB300 | `10de:31c2` | none |
+| H100 | `nvidia.com/GH100_H100_SXM5_80GB` | `nvidia.com/GH100_H100_NVSWITCH` |
+| H200 | `nvidia.com/GH100_H200_SXM_141GB` | `nvidia.com/GH100_H100_NVSWITCH` |
+| B200 | `nvidia.com/GB100_B200` | none |
+| GB200 | `nvidia.com/GB100_HGX_GB200` | none |
+| GB300 | `nvidia.com/GB110_GB300` | none |
 
-kubevirtci's `fake-pci` creates every device with the same ID, so it models
-GPUs only, not NVSwitches beside them.
+kubevirtci's `fake-pci` creates every device with the same ID, so it can model
+a board's GPUs but not the NVSwitches beside them.
 
 ### Check and clean up
 
