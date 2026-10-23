@@ -210,8 +210,10 @@ pull request:
 
 ## Not covered yet
 
-- **KubeVirt VMs with passed-through GPUs** on real CPU workers. Not part of
-  this suite yet.
+- **KubeVirt VMs with passed-through GPUs.** Not automated here.
+  [`vm-passthrough/`](vm-passthrough/README.md) is a reference: fake VFIO
+  devices with kubevirtci's upstream tooling, and the labels and settings the
+  NVIDIA GPU Operator needs for VM passthrough.
 - **Code that calls NVML or CUDA inside the pod.** Pods on fake nodes don't
   execute. For in-pod `nvidia-smi` on real CPU nodes, see NVIDIA's
   [nvml-mock](https://github.com/NVIDIA/k8s-test-infra/tree/main/deployments/nvml-mock)
