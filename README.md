@@ -152,18 +152,44 @@ GPU_TYPES="h100 gb200" KWOK_NODES_PER_TYPE=10 make container-up
 | `GPU_TYPES` | `h100 h200 b200 gb200 gb300` | Types to mock |
 | `KWOK_NODES_PER_TYPE` | `2` | Fake nodes per type |
 | `KWOK_VERSION` | `v0.7.0` | KWOK release |
+| `KWOK_POD_CIDR` | `198.18.0.0/16` | IPs KWOK gives pods on fake nodes |
+| `KWOK_NODE_IP` | `198.19.0.1` | IP KWOK gives the fake nodes |
 | `FGO_VERSION` | `0.2.1` | fake-gpu-operator chart version |
 | `FGO_NAMESPACE` | `fake-gpu-operator` | Its namespace |
 | `CONTAINER_TEST_NAMESPACE` | `mock-gpu-containers` | Where test pods run |
 | `TIMEOUT` | `600s` | Per-wait timeout |
 
-## Clusters that already run the NVIDIA GPU Operator
+## Running on a shared cluster
 
-The generated values already leave the `nvidia` RuntimeClass to the real
-operator. If real GPU nodes run NVIDIA's device plugin and DCGM exporter,
-fake-gpu-operator's own DaemonSets can collide with them. See its
-[mixed real + fake](https://github.com/run-ai/fake-gpu-operator#-mixed-real--fake-gpu-nodes)
-notes before installing there.
+Fake nodes are visible to everything in the cluster, not just these tests.
+Check these before running the suite on a cluster other people use:
+
+- **DaemonSets that tolerate every taint** (`operator: Exists` with no key,
+  typical of CNI agents, kube-proxy, node exporters) get a simulated pod on
+  every fake node. List them first:
+
+  ```bash
+  kubectl get ds -A -o json | jq -r '.items[] | select(any(.spec.template.spec.tolerations[]?; .operator=="Exists" and (.key // "")=="")) | "\(.metadata.namespace)/\(.metadata.name)"'
+  ```
+
+  Controllers behind them may also act on the new nodes: a CNI controller can
+  reserve addresses for them, and Prometheus will report the node exporter
+  targets on them as down. All of this goes away with `make container-down`.
+- **IP ranges:** KWOK's defaults give fake pods addresses from `10.0.0.1/24`,
+  and fake nodes the controller's own pod IP, which can duplicate real ones.
+  The suite moves them to `KWOK_POD_CIDR` and `KWOK_NODE_IP`, by default in
+  `198.18.0.0/15`, a range reserved for benchmarking. Pick another range if
+  your cluster uses that one.
+- **A real NVIDIA GPU Operator:** the generated values turn off
+  fake-gpu-operator's real-node DaemonSets (device plugin, MIG faker) and its
+  `nvidia` RuntimeClass. Its status exporter DaemonSet stays on, because the
+  KWOK labels come from the same component. It selects nodes the GPU Operator
+  labels `nvidia.com/gpu.deploy.dcgm-exporter=true`, so it would run beside the
+  real DCGM exporter on real GPU nodes. See fake-gpu-operator's
+  [mixed real + fake](https://github.com/run-ai/fake-gpu-operator#-mixed-real--fake-gpu-nodes)
+  notes.
+- **Footprint:** `KWOK_NODES_PER_TYPE=1` or a smaller `GPU_TYPES` keeps the
+  number of fake nodes down.
 
 ## CI
 

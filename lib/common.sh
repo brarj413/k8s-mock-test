@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Shared helpers for the k8s-mock-test scripts. Source it; don't run it.
 # Bash 3.2 compatible (macOS): no associative arrays, mapfile or ${v,,}.
 
@@ -56,11 +57,14 @@ GPU_COMPUTE_MINOR NODE_ARCH NODE_CPU NODE_MEMORY"
 
 # Fails unless every type in GPU_TYPES has a catalog file.
 check_gpu_types() {
-  local t
+  local t f known=""
   [ -n "$GPU_TYPES" ] || die "GPU_TYPES is empty"
+  for f in "$ROOT_DIR"/gpus/*.env; do
+    f=${f##*/}
+    known="$known ${f%.env}"
+  done
   for t in $GPU_TYPES; do
-    [ -f "$ROOT_DIR/gpus/$t.env" ] ||
-      die "unknown GPU type '$t' (known: $(cd "$ROOT_DIR/gpus" && ls ./*.env | sed 's|^\./||; s|\.env$||' | tr '\n' ' '))"
+    [ -f "$ROOT_DIR/gpus/$t.env" ] || die "unknown GPU type '$t' (known:$known)"
   done
 }
 
@@ -70,6 +74,7 @@ load_gpu() {
   for v in $GPU_VARS; do unset "$v"; done
   # shellcheck source=/dev/null
   . "$ROOT_DIR/gpus/$1.env"
+  # shellcheck disable=SC2034 # used by lib/render.sh
   GPU_TYPE="$1"
 }
 
