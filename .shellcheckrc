@@ -1,0 +1,5 @@
+# Scripts source lib/*.sh relative to their own directory.
+external-sources=true
+source-path=SCRIPTDIR
+# GPU_* / NODE_* come from gpus/<type>.env, loaded at run time by load_gpu.
+disable=SC2154
