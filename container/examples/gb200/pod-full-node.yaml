@@ -24,3 +24,4 @@ spec:
       resources:
         limits:
           nvidia.com/gpu: 4
+          nvidia.com/hostdev: 4
