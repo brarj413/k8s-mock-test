@@ -9,7 +9,6 @@ metadata:
     type: kwok
     app.kubernetes.io/part-of: k8s-mock-test
     k8s-mock-test/gpu-type: gb300
-    run.ai/simulated-gpu-node-pool: gb300
     kubernetes.io/arch: arm64
     kubernetes.io/hostname: kwok-gb300-1
     kubernetes.io/os: linux
@@ -18,6 +17,8 @@ metadata:
     nvidia.com/gpu.family: blackwell
     nvidia.com/gpu.compute.major: "10"
     nvidia.com/gpu.compute.minor: "3"
+    feature.node.kubernetes.io/rdma.capable: "true"
+    feature.node.kubernetes.io/rdma.available: "true"
 spec:
   taints:
     - key: kwok.x-k8s.io/node

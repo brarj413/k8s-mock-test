@@ -53,7 +53,7 @@ check_cluster() {
 # --- GPU catalog -------------------------------------------------------------
 
 GPU_VARS="GPU_NAME GPU_PRODUCT GPU_COUNT GPU_MEMORY_MIB GPU_FAMILY GPU_COMPUTE_MAJOR
-GPU_COMPUTE_MINOR NODE_ARCH NODE_CPU NODE_MEMORY"
+GPU_COMPUTE_MINOR IB_COUNT NODE_ARCH NODE_CPU NODE_MEMORY"
 
 # Fails unless every type in GPU_TYPES has a catalog file.
 check_gpu_types() {
@@ -68,7 +68,9 @@ check_gpu_types() {
   done
 }
 
-# Loads gpus/<type>.env into the GPU_* / NODE_* variables.
+# Loads gpus/<type>.env into the GPU_* / IB_COUNT / NODE_* variables.
+# IB_COUNT defaults to the GPU count (one HCA per GPU) and is 0 when
+# IB_RESOURCE is empty.
 load_gpu() {
   local v
   for v in $GPU_VARS; do unset "$v"; done
@@ -76,7 +78,12 @@ load_gpu() {
   . "$ROOT_DIR/gpus/$1.env"
   # shellcheck disable=SC2034 # used by lib/render.sh
   GPU_TYPE="$1"
+  : "${IB_COUNT:=$GPU_COUNT}"
+  [ -n "${IB_RESOURCE:-}" ] || IB_COUNT=0
 }
+
+# jsonpath for a node's allocatable <resource>, e.g. nvidia.com/hostdev.
+allocatable_path() { printf '{.status.allocatable.%s}' "${1//./\\.}"; }
 
 # --- waiting -----------------------------------------------------------------
 

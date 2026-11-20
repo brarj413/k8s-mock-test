@@ -9,7 +9,6 @@ metadata:
     type: kwok
     app.kubernetes.io/part-of: k8s-mock-test
     k8s-mock-test/gpu-type: h200
-    run.ai/simulated-gpu-node-pool: h200
     kubernetes.io/arch: amd64
     kubernetes.io/hostname: kwok-h200-1
     kubernetes.io/os: linux
@@ -18,6 +17,8 @@ metadata:
     nvidia.com/gpu.family: hopper
     nvidia.com/gpu.compute.major: "9"
     nvidia.com/gpu.compute.minor: "0"
+    feature.node.kubernetes.io/rdma.capable: "true"
+    feature.node.kubernetes.io/rdma.available: "true"
 spec:
   taints:
     - key: kwok.x-k8s.io/node

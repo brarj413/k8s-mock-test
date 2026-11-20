@@ -18,15 +18,18 @@ plain CPU cluster, down to a single control-plane node.
         ▼
   kwok-h100-1  kwok-h100-2  kwok-h200-1 ... kwok-gb300-2     (fake nodes)
   nvidia.com/gpu: 8 | 8 | 8 | 4 | 4                          (fake GPUs)
+  nvidia.com/hostdev: 8 | 8 | 12 | 4 | 4                     (fake InfiniBand)
   nvidia.com/gpu.product, .count, .memory, .family labels
 ```
 
 - **KWOK** ([kubernetes-sigs/kwok](https://github.com/kubernetes-sigs/kwok))
   adds nodes without kubelets and moves pods scheduled onto them to `Running`.
 - **fake-gpu-operator** ([run-ai/fake-gpu-operator](https://github.com/run-ai/fake-gpu-operator))
-  puts every node labelled `run.ai/simulated-gpu-node-pool=<type>` in a pool,
-  gives it `nvidia.com/gpu` capacity, and sets the GPU Feature Discovery labels
-  workloads select on.
+  puts every node labelled `k8s-mock-test/gpu-type=<type>` in a pool (the suite
+  uses its own label, so real nodes left with fake-gpu-operator's default
+  `run.ai/simulated-gpu-node-pool` label by another install are ignored),
+  gives it `nvidia.com/gpu` capacity and a fake InfiniBand resource, and sets
+  the GPU Feature Discovery labels workloads select on.
 
 Pods on fake nodes are simulated: they get scheduled, take GPUs from the node's
 capacity and reach `Running`, but no container process starts. The suite tests
@@ -34,19 +37,38 @@ everything up to and including scheduling, not code running on a GPU.
 
 ## Mocked GPU types
 
-| Type | `nvidia.com/gpu.product` | GPUs per node | GPU memory (MiB) | Node arch | Node CPU / memory |
-|---|---|---|---|---|---|
-| `h100` | `NVIDIA-H100-80GB-HBM3` | 8 | 81920 | amd64 | 224 / 2Ti |
-| `h200` | `NVIDIA-H200` | 8 | 143771 | amd64 | 224 / 2Ti |
-| `b200` | `NVIDIA-B200` | 8 | 184320 | amd64 | 224 / 2Ti |
-| `gb200` | `NVIDIA-GB200` | 4 | 190464 | arm64 | 144 / 960Gi |
-| `gb300` | `NVIDIA-GB300` | 4 | 284672 | arm64 | 144 / 960Gi |
+| Type | `nvidia.com/gpu.product` | GPUs per node | `nvidia.com/hostdev` per node | GPU memory (MiB) | Node arch | Node CPU / memory |
+|---|---|---|---|---|---|---|
+| `h100` | `NVIDIA-H100-80GB-HBM3` | 8 | 8 | 81920 | amd64 | 224 / 2Ti |
+| `h200` | `NVIDIA-H200` | 8 | 8 | 143771 | amd64 | 224 / 2Ti |
+| `b200` | `NVIDIA-B200` | 8 | 12 | 184320 | amd64 | 224 / 2Ti |
+| `gb200` | `NVIDIA-GB200` | 4 | 4 | 190464 | arm64 | 144 / 960Gi |
+| `gb300` | `NVIDIA-GB300` | 4 | 4 | 284672 | arm64 | 144 / 960Gi |
 
 Each type is one file in [`gpus/`](gpus). GB200 and GB300 model one NVL72
 compute tray (Grace is arm64), so their nodes carry
 `kubernetes.io/arch=arm64`. Every node also gets `nvidia.com/gpu.family` and
 `nvidia.com/gpu.compute.major` / `.minor`. To add a type, copy a file in
 `gpus/`, then run `make examples`.
+
+### Fake InfiniBand
+
+Every fake node also advertises InfiniBand HCAs, by default one per GPU (B200
+nodes are set to 12), as
+`nvidia.com/hostdev`, the resource NVIDIA's Network Operator host-device plugin
+advertises. The node also gets Node Feature Discovery's
+`feature.node.kubernetes.io/rdma.capable` and `rdma.available` labels.
+
+- **A different resource name:** set `IB_RESOURCE`, for example
+  `rdma/rdma_shared_device_a`.
+- **A different count:** set `IB_COUNT` in a type's `gpus/<type>.env`. Re-running
+  `make container-up` rebuilds existing fake nodes that no longer match.
+- **No InfiniBand:** set `IB_RESOURCE=""`. fake-gpu-operator never removes a
+  resource it has added, so to drop InfiniBand from existing fake nodes, run
+  `make container-down` before `make container-up`.
+
+As with GPUs, this is capacity for the scheduler; no RDMA device exists inside
+the pod.
 
 ## Prerequisites
 
@@ -95,10 +117,14 @@ For every type in `GPU_TYPES`:
 |---|---|
 | nodes | `KWOK_NODES_PER_TYPE` fake nodes exist and are `Ready` |
 | capacity | each advertises `nvidia.com/gpu` equal to the catalog count |
+| ib capacity | each advertises `nvidia.com/hostdev` equal to its IB count |
 | labels | `nvidia.com/gpu.product` and `nvidia.com/gpu.count` match the catalog |
-| 1gpu pod | a pod asking for 1 GPU runs on a node of that type |
-| full pod | a pod asking for all of a node's GPUs runs |
+| 1gpu pod | a pod asking for 1 GPU and 1 hostdev runs on a node of that type |
+| full pod | a pod asking for all of a node's GPUs and hostdevs runs |
 | too-many pod | a pod asking for one GPU more than a node has stays `Pending` with `Insufficient nvidia.com/gpu` |
+| too-many-ib pod | a pod asking for one hostdev more than a node has stays `Pending` with `Insufficient nvidia.com/hostdev` |
+
+The two IB checks are skipped when `IB_RESOURCE=""`.
 
 It prints a PASS/FAIL line per check and a summary, and exits non-zero on any
 failure. A type's pods run one at a time and are deleted afterwards, so one
@@ -109,7 +135,8 @@ leftover product label can't attract them.
 ## Writing your own tests
 
 Select a GPU type the way a workload on a real cluster would, by the GPU
-Feature Discovery label, and tolerate the KWOK taint:
+Feature Discovery label, ask for GPUs and InfiniBand together, and tolerate
+the KWOK taint:
 
 ```yaml
 apiVersion: v1
@@ -131,6 +158,7 @@ spec:
       resources:
         limits:
           nvidia.com/gpu: 8
+          nvidia.com/hostdev: 8
 ```
 
 [`container/examples/`](container/examples) has a node, a 1-GPU pod and a
@@ -154,6 +182,7 @@ GPU_TYPES="h100 gb200" KWOK_NODES_PER_TYPE=10 make container-up
 | `KUBE_CONTEXT` | current context | kubectl / helm context |
 | `GPU_TYPES` | `h100 h200 b200 gb200 gb300` | Types to mock |
 | `KWOK_NODES_PER_TYPE` | `2` | Fake nodes per type |
+| `IB_RESOURCE` | `nvidia.com/hostdev` | Fake InfiniBand resource; `""` turns it off |
 | `KWOK_VERSION` | `v0.7.0` | KWOK release |
 | `KWOK_POD_CIDR` | `198.18.0.0/16` | IPs KWOK gives pods on fake nodes |
 | `KWOK_NODE_IP` | `198.19.0.1` | IP KWOK gives the fake nodes |

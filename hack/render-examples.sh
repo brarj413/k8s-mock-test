@@ -20,7 +20,7 @@ for t in $GPU_TYPES; do
   load_gpu "$t"
   mkdir -p "$out/$t"
   render_kwok_node "kwok-$t-1" >"$out/$t/kwok-node.yaml"
-  render_gpu_pod "$t-1gpu" default 1 >"$out/$t/pod-1gpu.yaml"
-  render_gpu_pod "$t-full-node" default "$GPU_COUNT" >"$out/$t/pod-full-node.yaml"
+  render_gpu_pod "$t-1gpu" default 1 $((IB_COUNT > 0 ? 1 : 0)) >"$out/$t/pod-1gpu.yaml"
+  render_gpu_pod "$t-full-node" default "$GPU_COUNT" "$IB_COUNT" >"$out/$t/pod-full-node.yaml"
 done
 echo "wrote $(find "$out" -name '*.yaml' | wc -l | tr -d ' ') files to container/examples/"
