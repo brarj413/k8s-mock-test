@@ -1,0 +1,82 @@
+# A VM that takes the whole fake board through VFIO passthrough: 8 H200 GPUs and
+# 8 ConnectX-7 InfiniBand HCAs. Cloud-init prints the NVIDIA (10de) and Mellanox
+# (15b3) PCI devices it sees to the serial console:
+#   kubectl -n vfio-passthrough logs -l kubevirt.io/domain=h200-ib-test \
+#     -c guest-console-log | sed -n '/PASSTHROUGH CHECK/,/END PASSTHROUGH/p'
+#
+# containerDisk is used for simplicity; if this cluster's
+# kubevirt-plugin-sidecar-subpath-policy rejects the launcher pod, switch
+# rootdisk to a DataVolume (see ../README.md).
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: h200-ib-test
+  namespace: vfio-passthrough
+  labels:
+    app.kubernetes.io/part-of: k8s-mock-test
+spec:
+  runStrategy: Always
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: h200-ib-test
+    spec:
+      nodeSelector:
+        k8s-mock-test/vfio: h200-ib
+      domain:
+        cpu:
+          cores: 2
+        memory:
+          guest: 4Gi
+        devices:
+          logSerialConsole: true
+          gpus:
+            - {name: gpu0, deviceName: nvidia.com/GH100_H200_SXM_141GB}
+            - {name: gpu1, deviceName: nvidia.com/GH100_H200_SXM_141GB}
+            - {name: gpu2, deviceName: nvidia.com/GH100_H200_SXM_141GB}
+            - {name: gpu3, deviceName: nvidia.com/GH100_H200_SXM_141GB}
+            - {name: gpu4, deviceName: nvidia.com/GH100_H200_SXM_141GB}
+            - {name: gpu5, deviceName: nvidia.com/GH100_H200_SXM_141GB}
+            - {name: gpu6, deviceName: nvidia.com/GH100_H200_SXM_141GB}
+            - {name: gpu7, deviceName: nvidia.com/GH100_H200_SXM_141GB}
+          hostDevices:
+            - {name: nvswitch0, deviceName: nvidia.com/GH100_H100_NVSWITCH}
+            - {name: nvswitch1, deviceName: nvidia.com/GH100_H100_NVSWITCH}
+            - {name: nvswitch2, deviceName: nvidia.com/GH100_H100_NVSWITCH}
+            - {name: nvswitch3, deviceName: nvidia.com/GH100_H100_NVSWITCH}
+            - {name: ib0, deviceName: mellanox.com/connectx7}
+            - {name: ib1, deviceName: mellanox.com/connectx7}
+            - {name: ib2, deviceName: mellanox.com/connectx7}
+            - {name: ib3, deviceName: mellanox.com/connectx7}
+            - {name: ib4, deviceName: mellanox.com/connectx7}
+            - {name: ib5, deviceName: mellanox.com/connectx7}
+            - {name: ib6, deviceName: mellanox.com/connectx7}
+            - {name: ib7, deviceName: mellanox.com/connectx7}
+          interfaces:
+            - name: default
+              masquerade: {}
+          disks:
+            - name: rootdisk
+              disk: {bus: virtio}
+            - name: cloudinit
+              disk: {bus: virtio}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          containerDisk:
+            image: quay.io/containerdisks/ubuntu:24.04
+        - name: cloudinit
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              runcmd:
+                - |
+                  {
+                    echo "=== PASSTHROUGH CHECK: NVIDIA + Mellanox PCI devices in guest ==="
+                    for d in /sys/bus/pci/devices/*; do
+                      echo "$(basename "$d") $(cat "$d/vendor"):$(cat "$d/device") class=$(cat "$d/class")"
+                    done | grep -E "0x10de|0x15b3" || echo "NONE FOUND"
+                    echo "=== END PASSTHROUGH CHECK ==="
+                  } > /dev/ttyS0

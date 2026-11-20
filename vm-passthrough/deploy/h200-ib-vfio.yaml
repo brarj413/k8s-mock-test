@@ -1,0 +1,73 @@
+# Fake HGX H200 + ConnectX-7 InfiniBand board, bound to vfio-pci, for KubeVirt
+# VFIO passthrough tests with no real hardware.
+#
+# Runs setup.sh (from the h200-ib-vfio-scripts ConfigMap) on every node labelled
+# k8s-mock-test/vfio=h200-ib. It creates, on PCI domain faca (after a throwaway
+# filler at slot 0):
+#   8 x 10de:2335  NVIDIA H200   class 0x0302  -> nvidia.com/GH100_H200_SXM_141GB
+#   4 x 10de:22a3  NVSwitch      class 0x0680  -> nvidia.com/GH100_H100_NVSWITCH
+#   8 x 15b3:1021  ConnectX-7    class 0x0207  -> mellanox.com/connectx7
+# all bound to vfio-pci. The GPU Operator's sandbox device plugin advertises the
+# H200s and NVSwitches (externalResourceProvider=true); KubeVirt's own device
+# plugin advertises the ConnectX-7s (externalResourceProvider=false). All three
+# appear in `describe node`.
+#
+# The scripts ConfigMap is generated from this directory, e.g.:
+#   kubectl create configmap h200-ib-vfio-scripts -n vfio-passthrough \
+#     --from-file=setup.sh --from-file=fake-pci-multidev.py
+# See README.md. Deleting the DaemonSet does NOT unload the modules.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: h200-ib-vfio
+  namespace: vfio-passthrough
+  labels:
+    app.kubernetes.io/part-of: k8s-mock-test
+spec:
+  selector:
+    matchLabels:
+      app: h200-ib-vfio
+  template:
+    metadata:
+      labels:
+        app: h200-ib-vfio
+        app.kubernetes.io/part-of: k8s-mock-test
+    spec:
+      nodeSelector:
+        k8s-mock-test/vfio: h200-ib
+      hostPID: true
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: setup
+          image: ubuntu:22.04
+          command: ["bash", "/scripts/setup.sh"]
+          env:
+            - {name: FAKE_PCI_DEVICES, value: "8"}
+            - {name: FAKE_PCI_DEVICE_ID, value: "0x2335"}   # GH100 [H200 SXM 141GB]
+            - {name: FAKE_PCI_SWITCHES, value: "4"}
+            - {name: FAKE_PCI_SWITCH_ID, value: "0x22a3"}   # GH100 [H100 NVSwitch]
+            - {name: FAKE_PCI_IB, value: "8"}
+            - {name: FAKE_PCI_IB_VENDOR_ID, value: "0x15b3"} # Mellanox
+            - {name: FAKE_PCI_IB_DEVICE_ID, value: "0x1021"} # ConnectX-7
+            - {name: ALLOW_UNSAFE_INTERRUPTS, value: "true"}
+          securityContext:
+            privileged: true
+          readinessProbe:
+            exec:
+              command: ["test", "-f", "/tmp/ready"]
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+          volumeMounts:
+            - {name: scripts, mountPath: /scripts}
+            - {name: host-usr-src, mountPath: /host/usr/src, readOnly: true}
+            - {name: host-modules, mountPath: /host/lib/modules, readOnly: true}
+      volumes:
+        - name: scripts
+          configMap:
+            name: h200-ib-vfio-scripts
+        - name: host-usr-src
+          hostPath: {path: /usr/src}
+        - name: host-modules
+          hostPath: {path: /lib/modules}
